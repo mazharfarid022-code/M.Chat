@@ -1,6 +1,5 @@
 import React from 'react';
-import { Plus, MessageSquare, Settings, LogOut, Wrench, Image as ImageIcon, Code, FileText } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { Plus, MessageSquare, Settings, Wrench, Image as ImageIcon, Code, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface SidebarProps {
@@ -14,8 +13,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenSettings, onSelectTool, currentTool }: SidebarProps) {
-  const { user, logout } = useAuth();
-
   return (
     <div className="w-64 bg-zinc-950 text-zinc-100 flex flex-col h-screen border-r border-zinc-800">
       <div className="p-3">
@@ -99,21 +96,6 @@ export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenS
           <Settings size={16} />
           Settings
         </button>
-        <div className="flex items-center justify-between px-3 py-2 mt-2">
-          <div className="flex items-center gap-2 truncate">
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs">
-                {user?.email?.[0].toUpperCase()}
-              </div>
-            )}
-            <span className="text-sm text-zinc-300 truncate">{user?.displayName || user?.email}</span>
-          </div>
-          <button onClick={logout} className="text-zinc-500 hover:text-zinc-300 transition-colors">
-            <LogOut size={16} />
-          </button>
-        </div>
       </div>
     </div>
   );

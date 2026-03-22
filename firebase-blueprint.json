@@ -12,7 +12,7 @@
         "openaiApiKey": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["email", "createdAt"]
+      "required": ["createdAt"]
     },
     "Chat": {
       "title": "Chat",

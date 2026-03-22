@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 
 interface UserProfile {
-  email: string;
+  email?: string;
   displayName?: string;
   photoURL?: string;
   theme?: 'light' | 'dark';
@@ -16,8 +16,6 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
 
@@ -30,8 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
+        setUser(currentUser);
         try {
           const userRef = doc(db, 'users', currentUser.uid);
           const userSnap = await getDoc(userRef);
@@ -40,9 +38,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setProfile(userSnap.data() as UserProfile);
           } else {
             const newProfile: UserProfile = {
-              email: currentUser.email || '',
-              displayName: currentUser.displayName || '',
-              photoURL: currentUser.photoURL || '',
               theme: 'dark',
               createdAt: serverTimestamp(),
             };
@@ -52,32 +47,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         }
+        setLoading(false);
       } else {
-        setProfile(null);
+        // Sign in anonymously if no user is logged in
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error('Error signing in anonymously', error);
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
     return unsubscribe;
   }, []);
-
-  const signInWithGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error('Error signing in with Google', error);
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Error signing out', error);
-      throw error;
-    }
-  };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
@@ -91,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, updateProfile }}>
       {!loading && children}
     </AuthContext.Provider>
   );
