@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+    function uidNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Domain Validators
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasRequiredFields(['email', 'createdAt']) &&
+             hasOnlyAllowedFields(['email', 'displayName', 'photoURL', 'theme', 'openaiApiKey', 'createdAt']) &&
+             isValidEmail(data.email) &&
+             data.createdAt is timestamp &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             (!('theme' in data) || data.theme in ['light', 'dark']) &&
+             (!('openaiApiKey' in data) || (data.openaiApiKey is string && data.openaiApiKey.size() <= 300));
+    }
+
+    function isValidChat() {
+      let data = request.resource.data;
+      return hasRequiredFields(['userId', 'title', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(['userId', 'title', 'createdAt', 'updatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidMessage() {
+      let data = request.resource.data;
+      return hasRequiredFields(['chatId', 'userId', 'role', 'content', 'createdAt']) &&
+             hasOnlyAllowedFields(['chatId', 'userId', 'role', 'content', 'createdAt', 'type', 'imageUrl']) &&
+             data.userId == request.auth.uid &&
+             data.chatId is string && data.chatId.size() <= 100 &&
+             data.role in ['user', 'assistant', 'system'] &&
+             data.content is string && data.content.size() <= 100000 &&
+             data.createdAt is timestamp &&
+             (!('type' in data) || data.type in ['text', 'image', 'code']) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2000));
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser();
+      allow update: if isOwner(userId) && isValidUser() && areImmutableFieldsUnchanged(['createdAt', 'email']);
+      allow delete: if isOwner(userId);
+    }
+
+    match /chats/{chatId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidChat() && uidUnchanged();
+      allow update: if isDocOwner() && isValidChat() && uidNotModified() && areImmutableFieldsUnchanged(['createdAt', 'userId']);
+      allow delete: if isDocOwner();
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        allow create: if isAuthenticated() && isValidMessage() && uidUnchanged() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        allow update: if isAuthenticated() && isValidMessage() && uidNotModified() && areImmutableFieldsUnchanged(['createdAt', 'userId', 'chatId']) && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        allow delete: if isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+      }
+    }
+  }
+}
